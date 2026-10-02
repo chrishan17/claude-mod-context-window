@@ -103,16 +103,6 @@ function sum(list: readonly { tokens: number }[]): number {
   return list.reduce((total, one) => total + one.tokens, 0)
 }
 
-const WIDE = /[ᄀ-ᅟ⺀-꓏가-힣豈-﫿︰-﹏＀-｠￠-￦]/
-
-/** Cells a string takes in a terminal: CJK and full-width characters take two. */
-export function displayWidth(text: string): number {
-  let width = 0
-  for (const char of text) width += WIDE.test(char) ? 2 : 1
-
-  return width
-}
-
 /** A file path as a `file:` URL, each segment encoded. */
 export function fileUrl(path: string): string {
   return `file://${path.split('/').map(encodeURIComponent).join('/')}`
@@ -125,17 +115,18 @@ export function fileLink(path: string): string {
   return `[${label}](${fileUrl(path)})`
 }
 
-/** The tree drawing before a child: the guides of its ancestors, then its own branch. */
-function branch(guides: string, isLast: boolean): string {
-  return `${guides}${isLast ? '└─' : '├─'}`
-}
-
-function guidesFor(guides: string, isLast: boolean): string {
-  return `${guides}${isLast ? '  ' : '│ '}`
-}
+/**
+ * Cells each fixed column on a row's left takes: one indent level, the
+ * toggle, the glyph. Boxes, not padded strings, so the columns line up where
+ * the text is proportional (the desktop) as well as on the terminal.
+ */
+const INDENT_WIDTH = 2
+const TOGGLE_WIDTH = 2
+const GLYPH_WIDTH = 2
 
 type RowProps = {
-  guide?: string
+  /** How deep in the tree: one dim guide per level before the toggle. */
+  depth?: number
   toggleKey?: string
   isOpenNow?: boolean
   glyph: string
@@ -158,6 +149,14 @@ export function drawPane(ui: Ui, data: PaneData, act: PaneActions) {
   const tr = (text: string | undefined, arg?: string | number) =>
     text === undefined ? undefined : hasKey(text) ? t(lang, text, arg ?? '') : text
   const isOpen = (key: string, byDefault: boolean) => byDefault !== data.toggled.includes(key)
+
+  /** The indent guides for a row `depth` levels down, one fixed cell each. */
+  const indent = (depth = 0) =>
+    Array.from({ length: depth }, () => (
+      <Box flexShrink={0} width={INDENT_WIDTH}>
+        <Text dimColor>│</Text>
+      </Box>
+    ))
   const live = data.entries.filter(entry => entry.epoch === data.epoch)
   const inWindow = live.filter(entry => !entry.isOutside)
   const groups = data.startup?.groups ?? []
@@ -166,7 +165,8 @@ export function drawPane(ui: Ui, data: PaneData, act: PaneActions) {
 
   /**
    * One row on a fixed grid: guides, toggle, glyph | name, detail or file link
-   * (truncated) | badge | share | tokens, the last two right-aligned columns.
+   * (each truncated on its own, the detail first) | badge | share | tokens,
+   * the last two right-aligned columns.
    */
   const row = (props: RowProps) => {
     const color = props.isError ? 'error' : props.color
@@ -176,8 +176,8 @@ export function drawPane(ui: Ui, data: PaneData, act: PaneActions) {
 
     return (
       <Box flexDirection="row">
-        <Box flexShrink={0}>
-          {props.guide ? <Text dimColor>{props.guide}</Text> : null}
+        {indent(props.depth)}
+        <Box flexShrink={0} width={TOGGLE_WIDTH}>
           {props.toggleKey ? (
             <Button
               key={props.toggleKey}
@@ -186,20 +186,24 @@ export function drawPane(ui: Ui, data: PaneData, act: PaneActions) {
               label={props.isOpenNow ? '▾' : '▸'}
               onPress={() => act.toggle(props.toggleKey as string)}
             />
-          ) : (
-            <Text> </Text>
-          )}
-          <Text color={color}>{` ${props.isError ? '✗' : props.glyph} `}</Text>
+          ) : null}
+        </Box>
+        <Box flexShrink={0} width={GLYPH_WIDTH}>
+          <Text color={color}>{`${props.isError ? '✗' : props.glyph} `}</Text>
         </Box>
         <Box flexGrow={1} flexShrink={1} minWidth={0} flexDirection="row">
           <Box flexShrink={1} minWidth={0}>
-            <Text wrap="truncate-end">
-              <Text bold={props.isBold} dimColor={props.isQuiet}>
-                {props.label}
-              </Text>
-              {detail && !props.path ? <Text dimColor>{`  ${detail}`}</Text> : null}
+            <Text bold={props.isBold} dimColor={props.isQuiet} wrap="truncate-end">
+              {props.label}
             </Text>
           </Box>
+          {detail && !props.path ? (
+            <Box flexShrink={100} minWidth={0} marginLeft={2}>
+              <Text dimColor wrap="truncate-end">
+                {detail}
+              </Text>
+            </Box>
+          ) : null}
           {props.path ? (
             <Box flexShrink={0} marginLeft={2}>
               <Markdown text={fileLink(props.path)} dimColor />
@@ -220,7 +224,7 @@ export function drawPane(ui: Ui, data: PaneData, act: PaneActions) {
         ) : null}
         <Box flexShrink={0} width={TOKENS_WIDTH} justifyContent="flex-end">
           <Text color={tokenColor} dimColor={!tokenColor}>
-            {props.tokens === undefined ? '' : formatTokens(props.tokens)}
+            {props.tokens === undefined || (props.tokens === 0 && props.isQuiet) ? '' : formatTokens(props.tokens)}
           </Text>
         </Box>
       </Box>
@@ -229,8 +233,8 @@ export function drawPane(ui: Ui, data: PaneData, act: PaneActions) {
 
   /** A section heading: title, dim note, a rule to the edge, its total. */
   const heading = (title: string, tokens?: number, note?: string) => {
-    const used = displayWidth(title) + (note ? displayWidth(note) + 2 : 0)
-    const rule = Math.max(2, data.columns - used - TOKENS_WIDTH - (hasShare ? SHARE_WIDTH : 0) - 2)
+    // Longer than any room it gets: the Box's edge cuts it, on any font.
+    const rule = Math.max(2, data.columns)
 
     return (
       <Box flexDirection="row" marginTop={1}>
@@ -252,15 +256,15 @@ export function drawPane(ui: Ui, data: PaneData, act: PaneActions) {
   }
 
   /** Items under an open group, each on a branch, the first few then "N more". */
-  const itemRows = (items: readonly StartupItem[], guides: string, key: string, total?: number) => {
+  const itemRows = (items: readonly StartupItem[], depth: number, key: string, total?: number) => {
     const shown = isOpen(`${key}:all`, false) ? items : items.slice(0, TOP_ITEMS)
     const more = items.length - shown.length
 
     return (
       <Box flexDirection="column">
-        {shown.map((item, index) =>
+        {shown.map(item =>
           row({
-            guide: branch(guides, index === shown.length - 1 && more === 0),
+            depth,
             glyph: '·',
             color: 'inactive',
             label: tr(item.label) ?? '',
@@ -272,7 +276,8 @@ export function drawPane(ui: Ui, data: PaneData, act: PaneActions) {
         )}
         {more > 0 && (
           <Box flexDirection="row">
-            <Text dimColor>{`${branch(guides, true)}   `}</Text>
+            {indent(depth)}
+            <Box flexShrink={0} width={TOGGLE_WIDTH + GLYPH_WIDTH} />
             <Button key={`${key}:all`} plain dimColor label={t(lang, 'more', more)} onPress={() => act.toggle(`${key}:all`)} />
           </Box>
         )}
@@ -292,7 +297,7 @@ export function drawPane(ui: Ui, data: PaneData, act: PaneActions) {
   const subtree = (entry: Entry): Entry[] => [entry, ...(children.get(entry.id) ?? []).flatMap(subtree)]
 
   /** One entry on its branch and, while open, its children and preview. */
-  const node = (entry: Entry, guides: string, isLast: boolean) => {
+  const node = (entry: Entry, depth: number) => {
     const style = KINDS[entry.kind]
     const kids = children.get(entry.id) ?? []
     const key = `node:${entry.id}`
@@ -317,13 +322,12 @@ export function drawPane(ui: Ui, data: PaneData, act: PaneActions) {
     } else if (kids.length > 0 && !open) {
       badge = `+${kids.length} · ${formatTokens(sum(inside))}`
     }
-    const childGuides = guidesFor(guides, isLast)
     const visibleKids = open ? kids : []
 
     return (
       <Box flexDirection="column">
         {row({
-          guide: branch(guides, isLast),
+          depth,
           toggleKey: canOpen ? key : undefined,
           isOpenNow: open,
           glyph: style.glyph,
@@ -340,7 +344,8 @@ export function drawPane(ui: Ui, data: PaneData, act: PaneActions) {
         })}
         {open && entry.preview && (
           <Box flexDirection="row">
-            <Text dimColor>{`${childGuides}   `}</Text>
+            {indent(depth + 1)}
+            <Box flexShrink={0} width={TOGGLE_WIDTH} />
             <Box flexGrow={1} flexShrink={1} minWidth={0} marginBottom={1}>
               <Text dimColor wrap="wrap">
                 {entry.preview}
@@ -348,24 +353,24 @@ export function drawPane(ui: Ui, data: PaneData, act: PaneActions) {
             </Box>
           </Box>
         )}
-        {visibleKids.map((kid, index) => node(kid, childGuides, index === visibleKids.length - 1))}
+        {visibleKids.map(kid => node(kid, depth + 1))}
       </Box>
     )
   }
 
   /** The rows attached with a prompt, folded into one branch. */
-  const injectedGroup = (list: Entry[], key: string, guides: string, isLast: boolean) => {
+  const injectedGroup = (list: Entry[], key: string, depth: number) => {
+    // One row needs no fold over it.
+    if (list.length === 1) return node(list[0] as Entry, depth)
     const open = isOpen(key, list.length <= 4)
-    const counts = INJECTED.map(kind => [kind, list.filter(entry => entry.kind === kind).length] as const)
-      .filter(([, n]) => n > 0)
-      .map(([kind, n]) => `${KINDS[kind].glyph}${n}`)
-      .join(' ')
-    const childGuides = guidesFor(guides, isLast)
+    const kinds = INJECTED.map(kind => [kind, list.filter(entry => entry.kind === kind).length] as const).filter(([, n]) => n > 0)
+    // Split by kind only when there is more than one; else it restates the count.
+    const counts = kinds.length > 1 ? kinds.map(([kind, n]) => `${KINDS[kind].glyph}${n}`).join(' ') : undefined
 
     return (
       <Box flexDirection="column">
         {row({
-          guide: branch(guides, isLast),
+          depth,
           toggleKey: key,
           isOpenNow: open,
           glyph: '+',
@@ -374,21 +379,19 @@ export function drawPane(ui: Ui, data: PaneData, act: PaneActions) {
           detail: counts,
           tokens: sum(list),
         })}
-        {open && list.map((entry, index) => node(entry, childGuides, index === list.length - 1))}
+        {open && list.map(entry => node(entry, depth + 1))}
       </Box>
     )
   }
 
-  const startupGroup = (group: StartupGroup, isLast: boolean) => {
+  const startupGroup = (group: StartupGroup) => {
     const key = `start:${group.key}`
     const open = isOpen(key, false)
     const count = group.names?.length ?? group.items.length
-    const childGuides = guidesFor('', isLast)
 
     return (
       <Box flexDirection="column">
         {row({
-          guide: branch('', isLast),
           toggleKey: count > 0 ? key : undefined,
           isOpenNow: open,
           glyph: '■',
@@ -399,7 +402,8 @@ export function drawPane(ui: Ui, data: PaneData, act: PaneActions) {
         })}
         {open && group.names && (
           <Box flexDirection="row">
-            <Text dimColor>{`${childGuides}   `}</Text>
+            {indent(1)}
+            <Box flexShrink={0} width={TOGGLE_WIDTH} />
             <Box flexGrow={1} flexShrink={1} minWidth={0}>
               <Text dimColor wrap="wrap">
                 {group.names.join(', ')}
@@ -407,7 +411,7 @@ export function drawPane(ui: Ui, data: PaneData, act: PaneActions) {
             </Box>
           </Box>
         )}
-        {open && group.items.length > 0 && itemRows(group.items, childGuides, key)}
+        {open && group.items.length > 0 && itemRows(group.items, 1, key)}
       </Box>
     )
   }
@@ -416,9 +420,13 @@ export function drawPane(ui: Ui, data: PaneData, act: PaneActions) {
     <Box flexDirection="column">
       {heading(t(lang, 'startup'), data.startup ? startupTokens : undefined, t(lang, 'startup.note'))}
       {!data.startup && <Text dimColor>{`  ${t(lang, 'loading')}`}</Text>}
-      {groups.map((group, index) => startupGroup(group, index === groups.length - 1))}
+      {groups.map(group => startupGroup(group))}
       {data.startup && data.startup.deferred.count > 0 && (
-        <Text dimColor wrap="truncate-end">{`     ${t(lang, 'deferred', data.startup.deferred.count)}`}</Text>
+        <Box paddingLeft={TOGGLE_WIDTH + GLYPH_WIDTH}>
+          <Text dimColor wrap="truncate-end">
+            {t(lang, 'deferred', data.startup.deferred.count)}
+          </Text>
+        </Box>
       )}
     </Box>
   )
@@ -450,9 +458,9 @@ export function drawPane(ui: Ui, data: PaneData, act: PaneActions) {
           })}
         {compacted.length > 0 &&
           isOpen('compacted', false) &&
-          compacted.map((entry, index) =>
+          compacted.map(entry =>
             row({
-              guide: branch('', index === compacted.length - 1),
+              depth: 1,
               glyph: KINDS[entry.kind].glyph,
               color: 'inactive',
               label: tr(entry.label, entry.labelArg) ?? '',
@@ -475,7 +483,7 @@ export function drawPane(ui: Ui, data: PaneData, act: PaneActions) {
           <Box flexDirection="column">
             {olderEntries
               .filter(entry => !entry.parent)
-              .map((entry, index, list) => node(entry, '', index === list.length - 1))}
+              .map(entry => node(entry, 1))}
           </Box>
         )}
         {recent.map((turn, index) => {
@@ -489,7 +497,6 @@ export function drawPane(ui: Ui, data: PaneData, act: PaneActions) {
           const key = `turn:${data.epoch}:${turn}`
           const open = isOpen(key, index >= openFrom)
           const style = head ? KINDS[head.kind] : undefined
-          const branches = (injected.length > 0 ? 1 : 0) + rest.length
 
           return (
             <Box flexDirection="column" marginTop={index === 0 ? 0 : 0}>
@@ -503,8 +510,8 @@ export function drawPane(ui: Ui, data: PaneData, act: PaneActions) {
                 detail: open ? undefined : t(lang, 'items', list.length - (head ? 1 : 0)),
                 tokens: sum(list.filter(entry => !entry.isOutside)),
               })}
-              {open && injected.length > 0 && injectedGroup(injected, `${key}:inject`, '', branches === 1)}
-              {open && rest.map((entry, at) => node(entry, '', at === rest.length - 1))}
+              {open && injected.length > 0 && injectedGroup(injected, `${key}:inject`, 1)}
+              {open && rest.map(entry => node(entry, 1))}
             </Box>
           )
         })}
@@ -535,7 +542,7 @@ export function drawPane(ui: Ui, data: PaneData, act: PaneActions) {
               tokens: category.tokens,
               isQuiet: category.isQuiet,
             })}
-            {open && itemRows(category.items, '', category.key, total)}
+            {open && itemRows(category.items, 1, category.key, total)}
           </Box>
         )
       })
@@ -699,12 +706,12 @@ export function drawPane(ui: Ui, data: PaneData, act: PaneActions) {
                 tokens: sum(list),
               })}
               {open &&
-                sorted.map((file, index) => {
+                sorted.map(file => {
                   const ops = [...file.ops].map(([op, n]) => (n > 1 ? `${t(lang, `op.${op}`)}×${n}` : t(lang, `op.${op}`))).join(' ')
                   const reread = (file.ops.get('read') ?? 0) > 1
 
                   return row({
-                    guide: branch('', index === sorted.length - 1),
+                    depth: 1,
                     glyph: reread ? '!' : '·',
                     color: reread ? 'warning' : 'inactive',
                     label: ops,
@@ -805,7 +812,7 @@ export function drawPane(ui: Ui, data: PaneData, act: PaneActions) {
                   [...origin.list]
                     .sort((a, b) => b.tokens - a.tokens)
                     .map(entry => ({ label: tr(entry.label, entry.labelArg) ?? '', detail: tr(entry.detail, entry.detailArg), path: entry.path, tokens: entry.tokens })),
-                  '',
+                  1,
                   key,
                   total,
                 )}

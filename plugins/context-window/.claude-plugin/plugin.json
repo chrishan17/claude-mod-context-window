@@ -1,6 +1,6 @@
 {
   "name": "context-window",
-  "version": "0.5.1",
+  "version": "0.5.2",
   "description": "A pane listing everything that entered the context window since the session started, by turn and by category",
   "types": "./types/index.d.ts",
   "author": {
