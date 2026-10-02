@@ -1,0 +1,23 @@
+{
+  "name": "context-window",
+  "version": "0.5.0",
+  "description": "A pane listing everything that entered the context window since the session started, by turn and by category",
+  "types": "./types/index.d.ts",
+  "author": {
+    "name": "Chris Han"
+  },
+  "license": "MIT",
+  "userConfig": {
+    "language": {
+      "type": "string",
+      "title": "Language",
+      "description": "The pane's language. auto follows Claude Code's language setting, then the system locale.",
+      "default": "auto",
+      "options": [
+        "auto",
+        "zh",
+        "en"
+      ]
+    }
+  }
+}

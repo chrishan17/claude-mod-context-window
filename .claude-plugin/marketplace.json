@@ -1,0 +1,14 @@
+{
+  "name": "claude-mod-context-window",
+  "owner": {
+    "name": "Chris Han"
+  },
+  "description": "A Claude Code mod that shows the context window in a live pane",
+  "plugins": [
+    {
+      "name": "context-window",
+      "description": "A pane listing everything that entered the context window since the session started, by turn and by category",
+      "source": "./plugins/context-window"
+    }
+  ]
+}
