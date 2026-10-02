@@ -496,9 +496,9 @@ export function drawPane(ui: Ui, data: PaneData, act: PaneActions) {
               {row({
                 toggleKey: roots.length > 0 ? key : undefined,
                 isOpenNow: open,
-                glyph: style?.glyph ?? '·',
+                glyph: style?.glyph ?? (first?.kind === 'compaction' ? KINDS.compaction.glyph : '·'),
                 color: style?.color ?? 'inactive',
-                label: head ? (tr(head.label) ?? '') : t(lang, 'sessionStart'),
+                label: head ? (tr(head.label) ?? '') : t(lang, first?.kind === 'compaction' ? 'afterCompaction' : 'sessionStart'),
                 isBold: true,
                 detail: open ? undefined : t(lang, 'items', list.length - (head ? 1 : 0)),
                 tokens: sum(list.filter(entry => !entry.isOutside)),
@@ -895,7 +895,7 @@ export function drawPane(ui: Ui, data: PaneData, act: PaneActions) {
               <Text dimColor>
                 {fill?.tokens === undefined
                   ? `  ${t(lang, 'noResponse', formatTokens(fill?.window ?? 0))}`
-                  : `  ${formatTokens(fill.tokens)} / ${formatTokens(fill.window)}`}
+                  : `  ${fill.isEstimate ? '≈' : ''}${formatTokens(fill.tokens)} / ${formatTokens(fill.window)}`}
               </Text>
             </Text>
           </Box>

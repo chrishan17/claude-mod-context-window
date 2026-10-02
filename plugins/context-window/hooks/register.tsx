@@ -5,6 +5,7 @@ import type { ContextLog, Fill, PaneView, Startup, StartupItem } from '../types'
 import {
   EMPTY_LOG,
   bindAgent,
+  compactLog,
   measureThinking,
   normalizeLog,
   buildStartup,
@@ -44,7 +45,14 @@ const DOCK_COLUMNS = 64
 async function refresh($: EngineInterface, withBreakdown = true): Promise<void> {
   const usage = await $.session.usage(withBreakdown ? { breakdown: 'summary' } : undefined)
   const { tokens, window, percent, breakdown } = usage.context
-  await update($, fill, previous => ({ tokens, window, percent, model: breakdown?.model ?? previous?.model }))
+  await update($, fill, previous => {
+    const model = breakdown?.model ?? previous?.model
+    if (tokens !== undefined) return { tokens, window, percent, model }
+    // No response in this window yet: /context's estimate, or the one kept.
+    if (breakdown) return { tokens: breakdown.totalTokens, window, percent: breakdown.percentage, model, isEstimate: true }
+
+    return previous?.isEstimate ? { ...previous, window, model } : { window, model }
+  })
   if (!breakdown) return
 
   // The system prompt's sections and the built-in tools, asked of the engine
@@ -216,9 +224,21 @@ export const register: Register = (on, options) => {
     return result
   })
 
+  // The compaction's rows are written without passing session.append: the
+  // result is the one place the log can learn the window was replaced.
   on('session.compact', async ($, e, next) => {
     const result = await next(e)
-    await refresh($)
+    if (e.agentId || e.trigger === 'precompute' || !result.messages) return result
+    try {
+      await update($, log, current => compactLog(normalizeLog(current), `compact:${current.epoch + 1}`, result.messages))
+      // The engine installs the new conversation after this hook returns; until
+      // then every figure is of the window before. Drop the stale one and read
+      // again once it stands: /context's estimate until the next response.
+      await update($, fill, previous => (previous ? { window: previous.window, model: previous.model } : previous))
+      for (const delay of [500, 2000]) void $.clock.after(delay, () => void refresh($).catch(() => {}))
+    } catch {
+      // The compaction stands whatever the pane makes of it.
+    }
 
     return result
   })

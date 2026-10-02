@@ -1,6 +1,6 @@
 import { expect, test } from 'claude-code/testing'
 
-import { EMPTY_LOG, bindAgent, measureThinking, reduceRow, rowsFromMessages, toolLabel } from '../hooks/classify'
+import { EMPTY_LOG, bindAgent, compactLog, measureThinking, reduceRow, rowsFromMessages, toolLabel } from '../hooks/classify'
 import type { Row } from '../hooks/classify'
 
 const prompt = (uuid: string, text: string): Row => ({
@@ -192,6 +192,29 @@ test('a compaction boundary bumps the epoch though it has no role', () => {
   expect(log.epoch).toBe(1)
   expect(log.entries.filter(entry => entry.epoch === 1)).toHaveLength(1)
   expect(log.entries[1]).toMatchObject({ kind: 'compaction', label: 'entry.compactSummary' })
+})
+
+test('a compaction seen only by its hook still starts a new window, once', () => {
+  const before = fold([prompt('p1', 'first'), toolUse('r1', 'tu1', 'Bash', { command: 'ls' }), toolResult('t1', 'tu1', 'Bash', 'a.ts')])
+  const summary = [{ role: 'user', text: 'summary '.repeat(200), toolUses: [] }] as const
+  let log = compactLog(before, 'compact:1', summary)
+
+  expect(log.epoch).toBe(1)
+  expect(log.entries.filter(entry => entry.epoch === 1)).toEqual([expect.objectContaining({ kind: 'compaction', label: 'entry.compactSummary' })])
+  expect(log.entries.filter(entry => entry.epoch === 1)[0]?.tokens).toBeGreaterThan(100)
+
+  // Should the engine also append the boundary, the same compaction is not counted twice.
+  log = reduceRow(log, {
+    door: 'compaction',
+    uuid: 'c1',
+    origin: { kind: 'engine' },
+    message: { type: 'system', name: 'compact_boundary', content: [{ type: 'text', text: 'Conversation compacted' }] },
+  })
+  expect(log.epoch).toBe(1)
+  expect(compactLog(log, 'compact:2', summary).epoch).toBe(1)
+
+  log = reduceRow(log, prompt('p2', 'next'))
+  expect(compactLog(log, 'compact:2', summary).epoch).toBe(2)
 })
 
 test('a resumed transcript keeps reminders and commands out of the turns', () => {

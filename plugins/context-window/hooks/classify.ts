@@ -271,12 +271,14 @@ export function reduceRow(log: ContextLog, row: Row): ContextLog {
     activeSkill = undefined
     lastTool = undefined
     if (message.type === 'system' || !message.role) {
+      // The session.compact hook may have recorded this compaction already.
+      if (isCompacted(log)) return done()
       epoch += 1
       add({ id: uuid, kind: 'compaction', label: 'entry.compacted', tokens: 0 })
     } else {
       const last = entries[entries.length - 1]
       if (last?.kind === 'compaction' && last.epoch === epoch) {
-        entries[entries.length - 1] = { ...last, label: 'entry.compactSummary', tokens: last.tokens + tokens }
+        entries[entries.length - 1] = { ...last, label: 'entry.compactSummary', tokens: Math.max(last.tokens, tokens) }
       } else {
         add({ id: uuid, kind: 'compaction', label: 'entry.compactSummary', tokens })
       }
@@ -571,6 +573,44 @@ export function measureThinking(log: ContextLog, step: StepReport): ContextLog {
   }
 
   return { ...log, entries }
+}
+
+/** This turn's compaction is already in the log: nothing the person sent has followed it. */
+function isCompacted(log: ContextLog): boolean {
+  return log.epoch > 0 && log.entries.some(entry => entry.kind === 'compaction' && entry.epoch === log.epoch && entry.turn === log.turn)
+}
+
+/**
+ * A compaction as the session.compact hook sees it end: the rows before it
+ * leave the window, and what replaced them (the summary and the messages it
+ * kept) opens the next generation. The engine writes these rows without
+ * passing them through session.append, so this is where the log learns of it.
+ */
+export function compactLog(
+  log: ContextLog,
+  id: string,
+  messages: readonly { text: string; toolUses?: readonly unknown[]; toolResults?: readonly { text?: string }[] }[],
+): ContextLog {
+  const tokens = messages.reduce(
+    (sum, message) =>
+      sum +
+      estimateTokens(message.text) +
+      (message.toolUses?.length ? estimateTokens(JSON.stringify(message.toolUses)) : 0) +
+      (message.toolResults ?? []).reduce((part, result) => part + estimateTokens(result.text ?? ''), 0),
+    0,
+  )
+  if (isCompacted(log)) {
+    const entries = log.entries.map(entry =>
+      entry.kind === 'compaction' && entry.epoch === log.epoch && entry.turn === log.turn
+        ? { ...entry, label: 'entry.compactSummary', tokens: Math.max(entry.tokens, tokens) }
+        : entry,
+    )
+    return { ...log, entries }
+  }
+  const epoch = log.epoch + 1
+  const entry: Entry = { id, kind: 'compaction', label: 'entry.compactSummary', tokens, turn: log.turn, epoch }
+
+  return cap({ ...log, entries: [...log.entries, entry], epoch, activeSkill: undefined, lastTool: undefined })
 }
 
 function findLast<T>(list: readonly T[], test: (item: T) => boolean): number {

@@ -135,6 +135,11 @@ export type Fill = {
   window: number
   percent?: number
   model?: string
+  /**
+   * `tokens` is /context's estimate, not a response's measure: no response yet
+   * in this window (a fresh session, or one just compacted).
+   */
+  isEstimate?: boolean
 }
 
 export type PaneView = 'timeline' | 'category' | 'top' | 'files' | 'origin' | 'growth'
