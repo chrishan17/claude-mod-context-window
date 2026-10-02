@@ -99,6 +99,17 @@ Switch views with `1`–`6` while the pane has focus (ctrl+x then Tab), or click
 
 `r` re-reads the figures.
 
+## What the mod reads and sends
+
+The mod sends nothing anywhere. It makes no network requests and no API calls of its own; what it reads is only drawn in the pane.
+
+What it reads, all on this machine:
+- The conversation: the messages and tool calls as they enter the context, and on a resumed session the transcript (`$.session.messages`), to list and size them.
+- Local settings and environment: Claude Code's `language` setting (`$.config.list`) and the locale variables `LC_ALL`, `LC_MESSAGES` and `LANG` (`$.env.get`), only to pick the pane's language.
+- The window's usage and its startup breakdown (`$.session.usage`), the tool list (`$.tool.list`) and the agent list (`$.agent.list`).
+
+The one call that may look like a way out is `$.prompt.compose` in `hooks/register.tsx`. It only assembles the system prompt locally so the pane can name its sections and their sizes; it does not send a request to the model, and its result is not passed anywhere.
+
 ## Install
 
 Requires Claude Code 2.1.287 or later.
@@ -122,7 +133,7 @@ Notes:
 
 ## Language
 
-The pane draws in Chinese or English. Set it with the plugin's `language` option (`auto` / `zh` / `en`) in `/config`, or in `~/.claude/settings.json`:
+The pane draws in Chinese or English. Set it with the plugin's `language` option (`auto`, `zh` or `en`; any other value counts as `auto`) in `/config`, or in `~/.claude/settings.json`:
 
 ```json
 { "pluginConfigs": { "context-window": { "options": { "language": "zh" } } } }
