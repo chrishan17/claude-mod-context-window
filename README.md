@@ -5,57 +5,56 @@ A Claude Code mod that lists what is in the context window, in a side pane. It s
 ```
 20%  40k / 200k  claude-opus-5-5
 ████████░░░░░░░░░░░░░░░░░░░░░░░░
-[ 时间线 ] [ 按类别 ] [ 刷新 ]
+[ Timeline ] [ Kinds ] [ Refresh ]
 
-启动时载入                           13.3k
- ▸ ■ 系统提示词  14                   3.1k
- ▸ ■ MCP 工具  6                      9k
- ▸ ■ 记忆文件  2                      1.2k
-     按需工具 240 个未载入，不占窗口
+Loaded at startup                           13.3k
+ ▸ ■ System prompt  14                       3.1k
+ ▸ ■ MCP tools  6                              9k
+ ▸ ■ Memory files  2                         1.2k
+     240 deferred tools not loaded; names only
 
-会话中加入  12 项 · 估算               26.7k
- ▸ ❯ 帮我做一个 claude code mod  5 项  8.2k
- ▾ ❯ 这个 skill 不是简单的显示…        18.5k
-     + 系统注入 · 嵌套 CLAUDE.md  …/mod/CLAUDE.md  310
-     ◆ Skill  plugin-authoring  +内容  6.1k
-     ◆ Read  …/hooks/register.tsx      4.1k
-     ✗ Bash  npm test                  9.4k
-     ● The test fails because…         120
+Added this session  12 items · estimated    26.7k
+ ▸ ❯ build me a claude code mod  5 items     8.2k
+ ▾ ❯ this skill isn't just a display…       18.5k
+     + System reminder · Nested CLAUDE.md  …/mod/CLAUDE.md  310
+     ◆ Skill  plugin-authoring  +body         6.1k
+     ◆ Read  …/hooks/register.tsx             4.1k
+     ✗ Bash  npm test                         9.4k
+     ● The test fails because…                120
 ```
-
 ## What it records
 
 The categories follow the split the official docs use (https://code.claude.com/docs/en/context-window): what is in context **from startup**, what is **loaded on demand**, and the **conversation** that builds up turn by turn.
 
-**启动时载入 (startup; sent with every request).** These figures come from the same breakdown `/context` uses:
+**Loaded at startup (sent with every request).** These figures come from the same breakdown `/context` uses:
 
 | Category | Contents |
 | --- | --- |
-| 系统提示词 (system prompt) | The system prompt's sections |
-| 内置工具 (built-in tools) | Schemas of the built-in tools |
-| MCP 工具 / MCP 服务说明 (MCP tools / server instructions) | Loaded tool schemas per server, and the servers' instructions |
-| 记忆文件 (memory files) | CLAUDE.md files, rules and auto memory, each a clickable link |
-| 技能描述 (skill descriptions) | The one-line **descriptions** of every skill; not the skills' bodies |
+| System prompt | The system prompt's sections |
+| Built-in tools | Schemas of the built-in tools |
+| MCP tools / MCP server instructions | Loaded tool schemas per server, and the servers' instructions |
+| Memory files | CLAUDE.md files, rules and auto memory, each a clickable link |
+| Skill descriptions | The one-line **descriptions** of every skill; not the skills' bodies |
 
-**按需加载 (loaded on demand).** These enter the context only when something uses them:
-
-| Kind | Glyph | Contents |
-| --- | --- | --- |
-| 已加载技能 (loaded skills) | `✦` | A skill's full SKILL.md, loaded by the Skill tool or its slash command; its path links to the file |
-| 文件与记忆 (files and memory) | `❐` | A nested CLAUDE.md found beside a file Claude read, an @-mentioned file, edit notices |
-| 清单更新 (listing updates) | `☰` | Updates to the skill description list, the deferred tool list, MCP server instructions and agent types |
-| 按需载入工具 (tools loaded on demand) | `+` | Tool schemas loaded through ToolSearch |
-
-**对话消息 (conversation messages).** These are what each turn adds:
+**Loaded on demand.** These enter the context only when something uses them:
 
 | Kind | Glyph | Contents |
 | --- | --- | --- |
-| 你的输入 (your prompt) | `❯` | Opens a turn |
-| 工具调用 (tool calls) | `◆` (`✗` on error) | Tool name plus its key argument; file paths are links |
-| 子代理 (subagent) | `❖` | Only its final result enters this window |
-| 系统提醒 / Hook 输出 (system reminders / hook output) | `+` `↳` | Repeated identical reminders fold into one row marked `×N` |
-| 模型回复 / 思考 (replies / thinking) | `●` `✻` | Dimmed; click `▸` to expand the full snippet. When a thinking block's text was returned, its first line and snippet are shown. When only an encrypted signature came back, the row says so, and its size is measured from the request's reported usage (output tokens minus visible text and tool calls), marked 按用量 (by usage) |
-| 斜杠命令 / 消息投递 / 压缩摘要 (slash commands / deliveries / compaction summary) | `/` `»` `≡` | |
+| Loaded skills | `✦` | A skill's full SKILL.md, loaded by the Skill tool or its slash command; its path links to the file |
+| Files & memory | `❐` | A nested CLAUDE.md found beside a file Claude read, an @-mentioned file, edit notices |
+| Listing updates | `☰` | Updates to the skill description list, the deferred tool list, MCP server instructions and agent types |
+| Tools loaded on demand | `+` | Tool schemas loaded through ToolSearch |
+
+**Conversation.** These are what each turn adds:
+
+| Kind | Glyph | Contents |
+| --- | --- | --- |
+| Your prompts | `❯` | Opens a turn |
+| Tool calls | `◆` (`✗` on error) | Tool name plus its key argument; file paths are links |
+| Subagents | `❖` | Only its final result enters this window |
+| System reminders / Hook output | `+` `↳` | Repeated identical reminders fold into one row marked `×N` |
+| Replies / Thinking | `●` `✻` | Dimmed; click `▸` to expand the full snippet. When a thinking block's text was returned, its first line and snippet are shown. When only an encrypted signature came back, the row says so, and its size is measured from the request's reported usage (output tokens minus visible text and tool calls), marked "by usage" |
+| Slash commands / Deliveries / Compaction summary | `/` `»` `≡` | |
 
 ## Hierarchy
 
@@ -77,7 +76,7 @@ How each level is assigned:
 - **Under a skill:** tool calls, subagents and replies that come after a skill loads in the same turn hang under it. This is attribution by order: the skill's instructions were in force when those calls ran.
 - **Under a file tool:** a nested CLAUDE.md or path-scoped rule loaded right after a Read, Edit, Write, Grep or Glob call hangs under that call.
 - **Under ToolSearch:** tools it loaded hang under it. Listing updates that come from MCP servers connecting belong to no call.
-- **Under an Agent call:** the subagent's own tool calls are marked "子代理窗口" (subagent window) and excluded from the totals; its hand-back hangs under the call too.
+- **Under an Agent call:** the subagent's own tool calls are marked "subagent window" and excluded from the totals; its hand-back hangs under the call too.
 - **Hook output:** PreToolUse and PostToolUse output hangs under the tool call that triggered it.
 
 Paths are rendered as `file://` links (OSC 8 in the terminal): click to open the file.
@@ -90,12 +89,12 @@ Switch views with `1`–`6` while the pane has focus (ctrl+x then Tab), or click
 
 | Key | View | Question it answers |
 | --- | --- | --- |
-| `1` | 时间线 (timeline) | What came in, turn by turn, and what caused each item: skill → tool call → nested CLAUDE.md |
-| `2` | 类别 (category) | How much each category takes: startup / loaded on demand / conversation, the official split |
-| `3` | 排行 (top) | What takes the most room: every item, startup groups included, largest first, with a running share |
-| `4` | 文件 (files) | Which files are in context: grouped by folder, with what was done to each (read, edited, searched, injected, memory, skill); a file read twice is flagged 重复读取 (read more than once) |
-| `5` | 来源 (origin) | Who put it there: you, model output, tool results, skill bodies, subagents, engine injection, hooks, startup config; one stacked bar plus a row each |
-| `6` | 增长 (growth) | Which turn grew the context: one stacked bar per turn, coloured by kind, with a running total |
+| `1` | Timeline | What came in, turn by turn, and what caused each item: skill → tool call → nested CLAUDE.md |
+| `2` | Kinds | How much each category takes: startup / loaded on demand / conversation, the official split |
+| `3` | Top | What takes the most room: every item, startup groups included, largest first, with a running share |
+| `4` | Files | Which files are in context: grouped by folder, with what was done to each (read, edited, searched, injected, memory, skill); a file read twice is flagged "read again" |
+| `5` | Origin | Who put it there: you, model output, tool results, skill bodies, subagents, engine injection, hooks, startup config; one stacked bar plus a row each |
+| `6` | Growth | Which turn grew the context: one stacked bar per turn, coloured by kind, with a running total |
 
 `r` re-reads the figures.
 
