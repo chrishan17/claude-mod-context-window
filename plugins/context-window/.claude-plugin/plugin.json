@@ -1,12 +1,18 @@
 {
   "name": "context-window",
-  "version": "0.5.3",
+  "version": "0.5.4",
   "description": "A pane listing everything that entered the context window since the session started, by turn and by category",
   "types": "./types/index.d.ts",
   "author": {
     "name": "Chris Han"
   },
   "license": "MIT",
+  "homepage": "https://github.com/chrishan17/claude-mod-context-window",
+  "repository": "https://github.com/chrishan17/claude-mod-context-window",
+  "documentationUrl": "https://github.com/chrishan17/claude-mod-context-window#readme",
+  "supportUrl": "https://github.com/chrishan17/claude-mod-context-window/issues",
+  "privacyPolicyUrl": "https://github.com/chrishan17/claude-mod-context-window#what-the-mod-reads-and-sends",
+  "termsOfServiceUrl": "https://github.com/chrishan17/claude-mod-context-window/blob/main/LICENSE",
   "userConfig": {
     "language": {
       "type": "string",
